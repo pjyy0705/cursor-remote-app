@@ -996,15 +996,16 @@ function renderItem(it) {
   return el;
 }
 
-// "Stuck to the bottom" must survive the on-screen keyboard resizing the list: remember the last
-// position where the user was actually at the bottom and only re-stick after they scroll there again.
-let stickToBottom = true;
+// "Stuck to the bottom" must survive the on-screen keyboard resizing the list, and must not
+// yank the view back down while the user reads older messages. Start unstuck so a fresh render
+// only follows the bottom when the user is actually there.
+let stickToBottom = false, lastListHeight = 0;
 list.addEventListener('scroll', () => {
   stickToBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
 }, { passive: true });
 const nearBottom = () => stickToBottom;
 
-let lastChat = null;
+let lastChat = null, firstPaint = true;
 function renderChat(chat) {
   lastChat = chat;
   $('empty').hidden = !!chat;
@@ -1014,7 +1015,10 @@ function renderChat(chat) {
   if (chat?.mode) $('pickMode').textContent = chat.mode + ' ▾';
   if (chat?.model) $('pickModel').textContent = chat.model + ' ▾';
   if (!chat) { itemsEl.replaceChildren(); renderQueue(false, []); renderQuestions(null); return; }
-  const stick = nearBottom();
+  // Only the very first paint of a conversation lands at the newest message; after that the
+  // user's scroll position wins, so typing in the box never drags the transcript down.
+  const stick = nearBottom() || firstPaint;
+  firstPaint = false;
   // Anchor on the first visible item so loading older messages doesn't jump.
   let anchor = null, anchorTop = 0;
   if (!stick) {
