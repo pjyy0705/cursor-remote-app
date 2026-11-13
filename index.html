@@ -27,6 +27,19 @@
 
   header { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #252526; border-bottom: 1px solid #333; min-width: 0; }
   #dot { width: 9px; height: 9px; border-radius: 50%; background: #c33; flex: none; }
+  /* Run status at the top: pulsing while the Agent works, a tap-to-dismiss "done" chip afterwards. */
+  #runBadge { display: none; font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 9px; flex: none; }
+  #runBadge.run { display: inline-flex; align-items: center; gap: 4px; background: #17351f; color: #7fe0a0; }
+  #runBadge.run::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #4ade80; animation: pulse 1.1s ease-in-out infinite; }
+  #runBadge.done { display: inline-flex; align-items: center; gap: 4px; background: #1d3a5c; color: #9cc9ff; }
+  #runBadge.done::before { content: '✓'; font-weight: 700; }
+  @keyframes pulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
+  /* Project groups in the List sheet, mirroring Cursor's Agents sidebar. */
+  .groupHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 0 4px; padding: 0 4px; font-size: 12px; font-weight: 600; color: #9ab; letter-spacing: .02em; }
+  .groupHead:first-of-type { margin-top: 4px; }
+  .groupHead.cur .gname { color: #7fe0a0; }
+  .groupHead .gcount { font-weight: 400; color: #667; }
+  .chatRow .sub { display: block; margin-top: 2px; font-size: 11px; color: #778; }
   #dot.ok { background: #3c3; }
   #title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; background: none; border: none; padding: 4px 2px; text-align: left; color: #ccc; font-size: 14px; }
   #title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -195,7 +208,9 @@
 <body>
 <header>
   <span id="dot"></span>
-  <button id="title"><span id="titleText">连接中…</span></button>
+  <span id="runBadge" class="run"></span>
+  <button id="title"><span id="titleText">연결 중…</span></button>
+  <button id="listBtn" title="프로젝트 목록">목록</button>
   <div class="seg">
     <button id="tabChat" class="on">对话</button>
     <button id="tabScreen">画面</button>
@@ -279,6 +294,11 @@
   <div id="gateInfo"></div>
 </div>
 
+<script src="ko-1.js"></script>
+<script src="ko-2.js"></script>
+<script src="ko-3.js"></script>
+<script src="ko-4.js"></script>
+<script src="ko-patterns.js"></script>
 <script src="i18n.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -564,6 +584,7 @@ function connect() {
     else if (m.t === 'frame') onFrame(m);
     else if (m.t === 'panel') { panel = m.rect; layoutStage(); applyQuality(); }
     else if (m.t === 'windows') { windows = m.list; currentWindow = m.current; if (sheetKind === 'windows') showWindows(); }
+    else if (m.t === 'projects') { projects = m.groups; if (sheetKind === 'projects') showProjects(); }
     else if (m.t === 'attached') {
       store.set('window', m.id);
       currentWindow = m.id;
@@ -624,6 +645,26 @@ function showWindows() {
   openSheet('windows', `<h3>切换 Cursor 窗口</h3>${rows || '<div class="hint">没有找到窗口</div>'}`);
 }
 $('title').onclick = () => { send({ t: 'windows' }); showWindows(); };
+
+/* ---------- "List": 프로젝트 그룹과 그 안의 대화들 (Cursor Agents 사이드바와 같은 구조) ---------- */
+let projects = [];
+function relTime(ts) {
+  const s = Math.max(1, (Date.now() - ts) / 1000);
+  if (s < 60) return '방금';
+  if (s < 3600) return `${Math.floor(s / 60)}분`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간`;
+  return `${Math.floor(s / 86400)}일`;
+}
+function showProjects() {
+  if (!projects.length) return openSheet('projects', '<h3>프로젝트</h3><div class="hint">불러오는 중… 잠시 후 다시 열어 주세요</div>');
+  const html = projects.map(g => {
+    const chats = g.chats.map(c => `<button class="opt chatRow" data-conv="${esc(c.title)}">
+      <span class="lbl">${esc(c.title)}<span class="sub">${esc(relTime(c.at))}</span></span></button>`).join('');
+    return `<div class="groupHead ${g.current ? 'cur' : ''}"><span class="gname">${esc(g.name)}</span><span class="gcount">${g.chats.length}</span></div>${chats}`;
+  }).join('');
+  openSheet('projects', `<h3>프로젝트 · 대화</h3>${html}`);
+}
+$('listBtn').onclick = () => { projects = []; openSheet('projects', '<h3>프로젝트 · 대화</h3><div class="hint">불러오는 중…</div>'); send({ t: 'listProjects' }); };
 
 const MENU_TITLE = { mode: '选择模式', model: '选择模型', history: '历史对话' };
 function showMenu(kind, items, max) {
@@ -697,7 +738,7 @@ function showMainMenu() {
       : standalone() ? '' : '<button class="opt" data-act="install"><span class="lbl">安装到手机桌面（像 App 一样打开）</span></button>'}
     <button class="opt" data-act="reconnect"><span class="lbl">重新连接</span></button>
     <button class="opt" data-act="voice"><span class="lbl">语音按钮<span class="sub">输入法键盘自带麦克风的话用不着</span></span><span class="switch ${store.get('voice') === 'on' ? 'on' : ''}"></span></button>
-    <button class="opt" data-act="lang"><span class="lbl">语言 / Language</span><span class="tag">${I18N.lang === 'en' ? 'English' : '中文'}</span></button>
+    <button class="opt" data-act="lang"><span class="lbl">语言 / Language</span><span class="tag">${I18N.lang === 'en' ? 'English' : I18N.lang === 'ko' ? '한국어' : '中文'}</span></button>
     <button class="opt" data-act="devices"><span class="lbl">已配对设备</span></button>
     <button class="opt" data-act="logout"><span class="lbl">取消本机配对</span></button>
     ${donate ? '<button class="opt" data-act="donate"><span class="lbl">赞赏作者 ☕</span></button>' : ''}`);
@@ -774,26 +815,32 @@ async function enableNotify() {
   if (nativeNotify()) {
     window.CursorRemoteApp.setNotify(nativeConfig());
     notifyOn = true;
-    return status('通知已开启。华为等手机请在「设置 → 应用启动管理」里允许本 App 后台活动');
+    return status('알림이 켜졌습니다. 화웨이 등 일부 폰은 「설정 → 앱 시작 관리」에서 백그라운드 활동을 허용해 주세요');
   }
-  if (inApp) return status('请先在菜单里更新安卓 App，新版才支持通知', false);
+  if (inApp) return status('메뉴에서 안드로이드 앱을 업데이트해야 알림을 쓸 수 있습니다', false);
   if (!webPush()) {
     const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
-    return status(ios && !standalone() ? 'iPhone 要先「分享 → 添加到主屏幕」，从桌面图标打开后才能开启通知' : '这个浏览器不支持通知', false);
+    return status(ios && !standalone() ? '아이폰은 먼저 「공유 → 홈 화면에 추가」 후, 홈 아이콘으로 열어야 알림을 켤 수 있습니다' : '이 브라우저는 알림을 지원하지 않습니다', false);
   }
-  // Must be the first await: iOS only shows the permission prompt directly inside a tap.
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return status('没有通知权限，请在系统设置里允许本 App 发通知', false);
+  // iOS only shows the permission prompt when it is requested directly inside the tap. Ask here
+  // first, before any other await, or the prompt is silently swallowed.
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (permission !== 'granted') return status('알림 권한이 없습니다. 설정 → 알림에서 이 앱을 허용해 주세요', false);
+  await finishSubscribe();
+}
+
+// The part after permission: fetch the key, subscribe, and register with the relay.
+async function finishSubscribe() {
   try {
     const { key } = await api('/api/push/key').then(r => r.json());
     const reg = await swReady();
     const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(key) });
     const r = await post('/api/push/subscribe', { sub: sub.toJSON() });
-    if (!r.ok) throw new Error((await r.json()).error || '注册失败');
+    if (!r.ok) throw new Error((await r.json()).error || '등록 실패');
     notifyOn = true;
-    status('通知已开启');
+    status('알림이 켜졌습니다');
   } catch (e) {
-    status('开启通知失败：' + e.message, false);
+    status('알림 켜기 실패: ' + e.message, false);
   }
 }
 
@@ -835,6 +882,7 @@ $('sheet').addEventListener('click', async e => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.dataset.win) { closeSheet(); return send({ t: 'attach', id: b.dataset.win }); }
+  if (b.dataset.conv) { closeSheet(); status('대화 여는 중…'); return send({ t: 'openConversation', title: b.dataset.conv }); }
   if (b.dataset.kind) { closeSheet(); status('切换中…'); return send({ t: 'pickMenu', kind: b.dataset.kind, label: b.dataset.label }); }
   if (b.dataset.chopen) { closeSheet(); return openFile(b.dataset.chopen); }
   if (b.dataset.ch) {
@@ -858,12 +906,22 @@ $('sheet').addEventListener('click', async e => {
     await navigator.clipboard?.writeText(appAddress()).then(() => status('已复制地址'), () => status('复制失败，请手动记下地址', false));
   }
   else if (act === 'changeUrl') window.CursorRemoteApp?.changeUrl();
-  else if (act === 'notifyOn') { closeSheet(); enableNotify(); }
+  else if (act === 'notifyOn') {
+    // iOS: permission must be requested before anything else awaits, so ask first, then close the sheet.
+    if (!nativeNotify() && webPush() && Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission();
+      closeSheet();
+      if (permission !== 'granted') return status('알림 권한이 없습니다. 설정 → 알림에서 이 앱을 허용해 주세요', false);
+      return finishSubscribe();
+    }
+    closeSheet();
+    enableNotify();
+  }
   else if (act === 'notifyOff') { closeSheet(); disableNotify(); }
   else if (act === 'notifyTest') {
     closeSheet();
     const r = await post('/api/push/test').catch(() => null);
-    status(r?.ok ? '已发送测试通知，几秒内应该收到' : '发送失败', Boolean(r?.ok));
+    status(r?.ok ? '테스트 알림을 보냈습니다. 몇 초 안에 도착해야 합니다' : '전송 실패', Boolean(r?.ok));
   }
   else if (act === 'appUpdate') {
     if (apkUpdate()) { closeSheet(); installAppUpdate(); }
@@ -871,9 +929,10 @@ $('sheet').addEventListener('click', async e => {
   }
   else if (act === 'reconnect') { closeSheet(); ws?.close(); }
   else if (act === 'donate') showDonate();
-  else if (act === 'lang') openSheet('lang', '<h3>语言 / Language</h3>'
+  else if (act === 'lang') openSheet('lang', '<h3>语言 / Language / 언어</h3>'
     + `<button class="opt ${I18N.lang === 'zh' ? 'cur' : ''}" data-act="setLang" data-v="zh"><span class="lbl">中文</span></button>`
-    + `<button class="opt ${I18N.lang === 'en' ? 'cur' : ''}" data-act="setLang" data-v="en"><span class="lbl">English</span></button>`);
+    + `<button class="opt ${I18N.lang === 'en' ? 'cur' : ''}" data-act="setLang" data-v="en"><span class="lbl">English</span></button>`
+    + `<button class="opt ${I18N.lang === 'ko' ? 'cur' : ''}" data-act="setLang" data-v="ko"><span class="lbl">한국어</span></button>`);
   else if (act === 'setLang') I18N.set(b.dataset.v);
   else if (act === 'voice') {
     store.set('voice', store.get('voice') === 'on' ? null : 'on');
@@ -970,6 +1029,7 @@ function renderChat(chat) {
   $('actionBar').classList.toggle('show', chat.global.length > 0);
   renderQueue(chat.busy, chat.queued || [], chat.subagents || [], chat.readonly, chat.changed);
   renderQuestions(chat.readonly ? null : chat.questions);
+  trackDone(chat.busy);
 
   if (stick) list.scrollTop = list.scrollHeight;
   else if (anchor) {
@@ -980,6 +1040,27 @@ function renderChat(chat) {
 }
 
 let subsOpen = false;
+// Top-of-screen run status: "작업 중" while the Agent runs, then "완료" until tapped or the next run starts.
+// This is the fallback when iOS notifications are blocked or not yet enabled.
+let wasBusy = false, doneTimer = null;
+function trackDone(busy) {
+  const el = $('runBadge');
+  if (!el) return;
+  if (busy) {
+    clearTimeout(doneTimer);
+    wasBusy = true;
+    el.className = 'run';
+    el.textContent = '작업 중';
+    return;
+  }
+  if (!wasBusy) return;
+  wasBusy = false;
+  el.className = 'done';
+  el.textContent = '완료';
+  clearTimeout(doneTimer);
+  doneTimer = setTimeout(() => { el.className = ''; el.textContent = ''; }, 60000);
+}
+$('runBadge').onclick = () => { const el = $('runBadge'); clearTimeout(doneTimer); el.className = ''; el.textContent = ''; };
 // The Agent's ask-question tool: a card with the questions, options, a free-text answer and submit / skip.
 let qnSig = '';
 function renderQuestions(qs) {
