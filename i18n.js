@@ -2,7 +2,10 @@
 // Chat content, file previews and window/model names are left alone (see SKIP).
 const I18N = (() => {
   const saved = localStorage.getItem('cr-lang');
-  const lang = saved === 'zh' || saved === 'en' ? saved : /^zh\b/i.test(navigator.language || '') ? 'zh' : 'en';
+  const lang = saved === 'zh' || saved === 'en' || saved === 'ko'
+    ? saved
+    : /^ko\b/i.test(navigator.language || '') ? 'ko'
+    : /^zh\b/i.test(navigator.language || '') ? 'zh' : 'en';
 
   const EN = {
     '连接中…': 'Connecting…', '对话': 'Chat', '画面': 'Screen', '↑ 加载更早的消息': '↑ Load earlier messages',
@@ -110,6 +113,10 @@ const I18N = (() => {
     '验证码不对': 'Wrong code', '设备未配对': 'Device not paired', '需要二次验证': 'Two-factor verification required', '订阅信息无效': 'Invalid subscription',
   };
 
+  // Korean (keys are the same Chinese source strings). Kept in a separate table so the
+  // Chinese-key lookup logic stays shared between English and Korean.
+  const KO = Object.assign({}, KO_1, KO_2, KO_3, KO_4);
+
   // Strings with a variable part.
   const PATTERNS = [
     [/^电脑端地址更新于 (.+)$/, 'Computer address updated $1'],
@@ -144,8 +151,10 @@ const I18N = (() => {
   const line = s => {
     const key = s.trim();
     if (!key || !/[\u4e00-\u9fa5（）「」：]/.test(key)) return s;
-    let out = EN[key];
-    if (out == null) for (const [re, to] of PATTERNS) if (re.test(key)) { out = key.replace(re, to); break; }
+    const dict = lang === 'ko' ? KO : EN;
+    const pats = lang === 'ko' ? KO_PATTERNS : PATTERNS;
+    let out = dict[key];
+    if (out == null) for (const [re, to] of pats) if (re.test(key)) { out = key.replace(re, to); break; }
     if (out == null) return s;
     return s.replace(key, out);
   };
@@ -166,8 +175,8 @@ const I18N = (() => {
     for (const c of node.childNodes) fix(c);
   };
 
-  if (lang === 'en') {
-    document.documentElement.lang = 'en';
+  if (lang === 'en' || lang === 'ko') {
+    document.documentElement.lang = lang;
     const start = () => {
       fix(document.body);
       new MutationObserver(list => {
@@ -184,5 +193,5 @@ const I18N = (() => {
   }
 
   const set = v => { localStorage.setItem('cr-lang', v); location.reload(); };
-  return { lang, tr, set, speech: lang === 'en' ? 'en-US' : 'zh-CN' };
+  return { lang, tr, set, speech: lang === 'en' ? 'en-US' : lang === 'ko' ? 'ko-KR' : 'zh-CN' };
 })();
