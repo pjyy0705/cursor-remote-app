@@ -662,7 +662,7 @@ function relTime(ts) {
 function showProjects() {
   if (!projects.length) return openSheet('projects', '<h3>프로젝트</h3><div class="hint">불러오는 중… 잠시 후 다시 열어 주세요</div>');
   const html = projects.map(g => {
-    const chats = g.chats.map(c => `<button class="opt chatRow" data-conv="${esc(c.title)}">
+    const chats = g.chats.map(c => `<button class="opt chatRow" data-conv="${esc(c.title)}" data-cid="${esc(c.id)}">
       <span class="lbl">${esc(c.title)}<span class="sub">${esc(relTime(c.at))}</span></span></button>`).join('');
     return `<div class="groupHead ${g.current ? 'cur' : ''}"><span class="gname">${esc(g.name)}</span><span class="gcount">${g.chats.length}</span></div>${chats}`;
   }).join('');
@@ -886,7 +886,7 @@ $('sheet').addEventListener('click', async e => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.dataset.win) { closeSheet(); return send({ t: 'attach', id: b.dataset.win }); }
-  if (b.dataset.conv) { closeSheet(); status('대화 여는 중…'); return send({ t: 'openConversation', title: b.dataset.conv }); }
+  if (b.dataset.conv) { closeSheet(); status('대화 여는 중…'); return send({ t: 'openConversation', title: b.dataset.conv, id: b.dataset.cid }); }
   if (b.dataset.kind) { closeSheet(); status('切换中…'); return send({ t: 'pickMenu', kind: b.dataset.kind, label: b.dataset.label }); }
   if (b.dataset.chopen) { closeSheet(); return openFile(b.dataset.chopen); }
   if (b.dataset.ch) {
